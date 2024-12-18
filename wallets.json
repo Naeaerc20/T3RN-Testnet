@@ -1,0 +1,14 @@
+[
+    {
+        "id": 1,
+        "wallet": "",
+        "privateKey": ""
+    },
+    {
+        "id": 2,
+        "wallet": "",
+        "privateKey": ""
+    }
+// add more if needed
+]
+
