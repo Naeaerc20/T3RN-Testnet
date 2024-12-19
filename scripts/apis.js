@@ -37,4 +37,24 @@ const estimateFees = async (amountWei, fromChainKey, toChainKey) => {
   }
 };
 
-module.exports = { estimateFees };
+const getEarnedPoints = async (walletAddress) => {
+  const url = `https://pricer.t1rn.io/user/brn/balance?account=${walletAddress}`;
+
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+  };
+
+  try {
+    const response = await axios.get(url, { headers });
+
+    if (response.status === 200) {
+      return response.data;
+    } else {
+      return null;
+    }
+  } catch (error) {
+    return null;
+  }
+};
+
+module.exports = { estimateFees, getEarnedPoints };
