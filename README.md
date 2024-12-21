@@ -16,3 +16,9 @@ Basic facilities:
 5. Run "node index.js" and start using the application
 
 NOTE: For better performance it is highly recommended to set your own RPC URLs in the "scripts/chains.js" file
+NOTE 2: Added "strategy" directory, I discovered that if you use layerZero bridge you can bridge ETH from Arbitrum, Optimism, Ethereum Mainnet
+To Sepolia & obtain a lot of ETH, Then you can use Super Bridge to bridge your SepoliaETH to Optimism Sepolia ETH - it can make the code to run smoothly
+(layerzero bridge still under construction)...
+(superbridge available to be used).
+Edit "strategy/ABI.js" and set your on alchemy RPCs for better experience
+NOTE 3: Added optional usage of proxies for point checker - add your proxies in this form "socks5://login:pass@ip:port" in proxies.txt

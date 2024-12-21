@@ -6,12 +6,13 @@ const colors = require('colors');
 const inquirer = require('inquirer');
 const readlineSync = require('readline-sync');
 const { ethers } = require('ethers');
-const { estimateFees, getEarnedPoints } = require('./scripts/apis');
+const { estimateFees, getEarnedPoints, getPublicIP } = require('./scripts/apis');
 const chains = require('./scripts/chains');
 const orderABI = require('./ABI');
 const fs = require('fs');
 const path = require('path');
 
+// Read wallets
 const walletsPath = path.join(__dirname, 'wallets.json');
 let wallets = [];
 try {
@@ -22,6 +23,20 @@ try {
   process.exit(1);
 }
 
+// --- Read proxies from proxies.txt (if it exists) ---
+let proxies = [];
+const proxiesPath = path.join(__dirname, 'proxies.txt');
+if (fs.existsSync(proxiesPath)) {
+  try {
+    const proxyFileData = fs.readFileSync(proxiesPath, 'utf8');
+    // Split by line and remove empty lines
+    proxies = proxyFileData.split('\n').map(line => line.trim()).filter(Boolean);
+  } catch (err) {
+    console.error(colors.red('Error reading proxies.txt:', err.message));
+  }
+}
+
+// Main menu
 const mainMenu = async () => {
   consoleClear();
   console.log(
@@ -112,6 +127,7 @@ const manualBridge = async () => {
   console.log(colors.blue('--- Manual Bridge ---\n'));
 
   try {
+    // List wallets to pick from
     const walletChoices = wallets.map(wallet => ({
       name: `${wallet.id}. ${wallet.wallet}`,
       value: wallet.id
@@ -129,6 +145,7 @@ const manualBridge = async () => {
     const selectedWallet = wallets.find(w => w.id === walletAnswer.walletId);
     console.log(colors.green(`Selected wallet: ${selectedWallet.wallet}\n`));
 
+    // Fetch balances from some chains
     const chainsToCheck = ['arbt', 'opsp', 'blss', 'bssp'];
     console.log(colors.blue('Wallet Balances:'));
     const balances = await Promise.all(chainsToCheck.map(async (chainId) => {
@@ -145,9 +162,9 @@ const manualBridge = async () => {
     balances.forEach(({ chain, balance }) => {
       console.log(`${chain}: ${balance} ETH`);
     });
-
     console.log();
 
+    // From chain
     const fromChainAnswer = await inquirer.prompt([
       {
         type: 'list',
@@ -165,6 +182,7 @@ const manualBridge = async () => {
     const fromChain = fromChainAnswer.fromChain;
     console.log(colors.green(`Selected source chain: ${fromChain}\n`));
 
+    // To chain
     const toChainAnswer = await inquirer.prompt([
       {
         type: 'list',
@@ -182,6 +200,7 @@ const manualBridge = async () => {
     const toChain = toChainAnswer.toChain;
     console.log(colors.green(`Selected destination chain: ${toChain}\n`));
 
+    // Input amount
     let amountETH = '';
     while (true) {
       amountETH = readlineSync.question('Please enter the amount of ETH you want to bridge: ');
@@ -197,10 +216,12 @@ const manualBridge = async () => {
     const amountWei = ethers.utils.parseEther(amountETH).toString();
     console.log(colors.green(`Converted amount: ${amountWei} wei`));
 
+    // Prepare destination bytes4
     const destinationASCII = chains[toChain].ASCII_REF;
     const destinationHEX = ethers.utils.hexlify(ethers.utils.toUtf8Bytes(destinationASCII)).slice(0, 10);
     console.log(colors.green(`Destination HEX (bytes4): ${destinationHEX}`));
 
+    // Estimate fees from API
     const estimatedData = await estimateFees(amountWei, fromChain, toChain);
     if (!estimatedData) {
       console.log(colors.red('Error fetching estimations from the API.'));
@@ -222,6 +243,7 @@ const manualBridge = async () => {
       maxReward: ethers.utils.parseEther(amountETH).toString()
     };
 
+    // Build transaction
     const chainConfig = chains[fromChain];
     if (!chainConfig.ROUTER) {
       console.log(colors.red(`The ROUTER address for chain ${fromChain} is not configured.\n`));
@@ -298,9 +320,26 @@ const manualBridge = async () => {
   }
 };
 
+// --- Check User Points with optional proxy usage ---
 const checkUserPoints = async () => {
   consoleClear();
   console.log(colors.blue('--- Check User Points ---\n'));
+
+  // Prompt to use proxies or not
+  let useProxies = false;
+  if (proxies.length > 0) {
+    const proxyAnswer = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'useProxies',
+        message: 'Do you want to use proxies to check points?',
+        default: false
+      }
+    ]);
+    useProxies = proxyAnswer.useProxies;
+  } else {
+    console.log(colors.yellow('No proxies found (proxies.txt). Proceeding without proxies.\n'));
+  }
 
   try {
     const walletChoices = wallets.map(wallet => ({
@@ -320,7 +359,23 @@ const checkUserPoints = async () => {
     const selectedWallet = wallets.find(w => w.id === walletAnswer.walletId);
     const walletAddress = selectedWallet.wallet;
 
-    const earnedPointsData = await getEarnedPoints(walletAddress);
+    // If using proxies, pick the first available proxy
+    let proxyUrl = null;
+    if (useProxies && proxies.length > 0) {
+      proxyUrl = proxies.shift(); // Remove the first proxy from the list
+
+      try {
+        // Check public IP via that proxy
+        const myIP = await getPublicIP(proxyUrl);
+        console.log(colors.green(`Current Proxy IP: [${myIP}]`));
+      } catch (err) {
+        console.log(colors.red(`Error obtaining public IP with Proxy [${proxyUrl}]: ${err.message}`));
+        console.log(colors.yellow('Proceeding anyway...\n'));
+      }
+    }
+
+    // Now call getEarnedPoints with or without the proxy
+    const earnedPointsData = await getEarnedPoints(walletAddress, proxyUrl);
     if (!earnedPointsData) {
       console.log(colors.red('Error fetching earned points from the API.\n'));
       await pause();
@@ -351,6 +406,7 @@ const checkUserPoints = async () => {
   }
 };
 
+// Automatic bridge placeholder
 const automaticBridge = async () => {
   console.log(colors.yellow('Please run node auto_index.js to use this function'));
   await pause();
