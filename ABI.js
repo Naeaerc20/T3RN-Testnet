@@ -44,4 +44,34 @@ const orderABI = [
   }
 ];
 
-module.exports = orderABI;
+const claimRefundV1BatchABI = [
+  {
+    "type": "function",
+    "name": "claimRefundV1Batch",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      {
+        "name": "orderNonceArray",
+        "type": "uint32[]"
+      },
+      {
+        "name": "rewardAssetArray",
+        "type": "address[]"
+      },
+      {
+        "name": "maxRewardArray",
+        "type": "uint256[]"
+      },
+      {
+        "name": "orderTimestampArray",
+        "type": "uint256[]"
+      }
+    ],
+    "outputs": []
+  }
+];
+
+module.exports = {
+  orderABI,
+  claimRefundV1BatchABI
+};

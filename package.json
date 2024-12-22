@@ -3,6 +3,7 @@
     "axios": "^1.7.9",
     "colors": "^1.4.0",
     "console-clear": "^1.1.1",
+    "dotenv": "^16.4.7",
     "ethers": "^5.7.2",
     "figlet": "^1.8.0",
     "inquirer": "^8.2.4",

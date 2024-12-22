@@ -9,6 +9,10 @@ const path = require('path');
 const inquirer = require('inquirer');
 const { estimateFees } = require('./scripts/apis');
 const chains = require('./scripts/chains');
+const { orderABI } = require('./ABI');
+
+// Debug: display the orderABI
+console.log('orderABI:', orderABI);
 
 // Load wallets from wallets.json
 const walletsPath = path.join(__dirname, 'wallets.json');
@@ -26,21 +30,22 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 500;
 
 // Constants for bridge transactions
-const MIN_BRIDGE_TXS = 7; // Minimum number of transactions per wallet
+const MIN_BRIDGE_TXS = 7;  // Minimum number of transactions per wallet
 const MAX_BRIDGE_TXS = 15; // Maximum number of transactions per wallet
 
 // Utility function to pause execution
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Utility function to generate random ETH amount between 0.105 and 0.12 with up to 5 decimals
+// Utility function to generate a random ETH amount (you can adjust min/max as you wish)
 const getRandomAmount = () => {
-  const min = 0.105;
-  const max = 0.12;
+  // Example: currently forces 0.1 exactly; you can update these if you prefer 0.105-0.12, etc.
+  const min = 0.1;
+  const max = 0.1;
   const random = Math.random() * (max - min) + min;
   return parseFloat(random.toFixed(5));
 };
 
-// Function to select a destination chain different from the source chain
+// Function to choose a random destination chain different from the source
 const selectDestinationChain = (sourceChainKey) => {
   const availableChains = Object.keys(chains).filter(chain => chain !== sourceChainKey);
   if (availableChains.length === 0) {
@@ -50,7 +55,7 @@ const selectDestinationChain = (sourceChainKey) => {
   return availableChains[randomIndex];
 };
 
-// Function to perform a single bridge transaction with error handling and retries
+// Perform a single bridge transaction with retries
 const performTransaction = async (wallet, sourceChainKey, destinationChainKey, amountETH, retryCount = 0) => {
   const sourceChain = chains[sourceChainKey];
   const destinationChain = chains[destinationChainKey];
@@ -59,6 +64,7 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
   const destinationASCII = destinationChain.ASCII_REF;
   const destinationHEX = ethers.utils.hexlify(ethers.utils.toUtf8Bytes(destinationASCII)).slice(0, 10);
 
+  // Estimate fees via API
   let estimatedData;
   try {
     estimatedData = await estimateFees(amountWei, sourceChainKey, destinationChainKey);
@@ -89,11 +95,47 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
     return;
   }
 
+  // Create provider and contract instance
   const provider = new ethers.providers.JsonRpcProvider(sourceChain.RPC_URL);
   const walletObj = new ethers.Wallet(wallet.privateKey, provider);
-  const routerContract = new ethers.Contract(sourceChain.ROUTER, require('./ABI'), walletObj);
+  const routerContract = new ethers.Contract(sourceChain.ROUTER, orderABI, walletObj);
 
   try {
+    // Get fee data
+    const feeData = await provider.getFeeData();
+    let baseFee = feeData.lastBaseFeePerGas || feeData.maxFeePerGas;
+    if (!baseFee) {
+      baseFee = ethers.utils.parseUnits('1', 'gwei');
+    }
+    // Add 25% to baseFee
+    const add25 = baseFee.mul(25).div(100);
+    const maxFeePerGas = baseFee.add(add25);
+    const maxPriorityFeePerGas = maxFeePerGas;
+
+    // Estimate gas
+    let gasLimit;
+    try {
+      const estimatedGas = await routerContract.estimateGas.order(
+        ethers.utils.hexZeroPad(params.destination, 4),
+        params.asset,
+        params.targetAccount,
+        params.amount,
+        params.rewardAsset,
+        params.insurance,
+        params.maxReward,
+        {
+          value: ethers.utils.parseEther(amountETH.toString())
+        }
+      );
+      gasLimit = estimatedGas.mul(110).div(100); // 10% buffer
+    } catch (error) {
+      console.log(colors.yellow(`Gas estimation failed. Using fallback random gas limit.\n`));
+      gasLimit = Math.floor(
+        Math.random() * (sourceChain.maxGasLimit - sourceChain.minGasLimit + 1)
+      ) + sourceChain.minGasLimit;
+    }
+
+    // Execute order
     const tx = await routerContract.order(
       ethers.utils.hexZeroPad(params.destination, 4),
       params.asset,
@@ -104,9 +146,9 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
       params.maxReward,
       {
         value: ethers.utils.parseEther(amountETH.toString()),
-        maxFeePerGas: ethers.utils.parseUnits('1', 'gwei'),
-        maxPriorityFeePerGas: ethers.utils.parseUnits('1', 'gwei'),
-        gasLimit: Math.floor(Math.random() * (sourceChain.maxGasLimit - sourceChain.minGasLimit + 1)) + sourceChain.minGasLimit
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+        gasLimit
       }
     );
 
@@ -116,12 +158,14 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
     const txUrl = `${txExplorer}/${tx.hash}`;
     console.log(colors.green(`Tx Hash Sent! - ${txUrl}`));
 
+    // Wait for confirmation
     const receipt = await tx.wait();
     console.log(colors.green(`Tx Confirmed in Block [${receipt.blockNumber}]\n`));
 
   } catch (error) {
     const errorMessage = error.message.toLowerCase();
     if (errorMessage.includes('insufficient funds')) {
+      // Retry logic
       if (retryCount < MAX_RETRIES) {
         const newAmountETH = parseFloat((amountETH * 0.95).toFixed(5));
         console.log(colors.red('INSUFFICIENT_FUNDS: Retrying with 5% less amount.'));
@@ -138,12 +182,12 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
   }
 };
 
-// Function to get a random integer between min and max (inclusive)
+// Generate a random integer between min and max (inclusive)
 const getRandomInt = (min, max) => {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 };
 
-// Function to fetch balances for all chains for a given wallet
+// Fetch balances for all chains for a given wallet
 const fetchBalances = async (wallet) => {
   const balances = {};
   for (const chainKey of Object.keys(chains)) {
@@ -160,12 +204,12 @@ const fetchBalances = async (wallet) => {
   return balances;
 };
 
-// Function to calculate maximum possible transactions based on balances
+// Calculate how many transactions are possible based on balances
 const calculateMaxTxs = (balances) => {
   let totalTxs = 0;
   const chainTxCounts = {};
   for (const [chainKey, balance] of Object.entries(balances)) {
-    // Here, we assume we can do 1 transaction for each 0.1 ETH
+    // Example: 1 transaction per 0.1 ETH
     const txCount = Math.floor(balance / 0.1);
     chainTxCounts[chainKey] = txCount;
     totalTxs += txCount;
@@ -173,12 +217,11 @@ const calculateMaxTxs = (balances) => {
   return { totalTxs, chainTxCounts };
 };
 
-// Function to assign transactions based on random bridgeTxs within the limits of balances
+// Assign random number of transactions per chain
 const assignRandomTxs = (chainTxCounts) => {
   const assignedTxs = {};
   for (const [chainKey, count] of Object.entries(chainTxCounts)) {
     if (count > 0) {
-      // Generate a random number of transactions within the specified min/max, but not exceeding the chain’s count
       const txCount = getRandomInt(MIN_BRIDGE_TXS, MAX_BRIDGE_TXS);
       assignedTxs[chainKey] = Math.min(txCount, count);
     } else {
@@ -188,24 +231,27 @@ const assignRandomTxs = (chainTxCounts) => {
   return assignedTxs;
 };
 
-// Function to process a single wallet
+// Process a single wallet
 const processWallet = async (wallet, useRandomTxs) => {
+  console.log(colors.magenta(`Starting bridge workflow for Wallet [${wallet.wallet}]`));
+
+  // 1) Fetch balances
+  const balances = await fetchBalances(wallet);
+  // 2) Determine possible transactions
+  const { totalTxs, chainTxCounts } = calculateMaxTxs(balances);
+
+  if (totalTxs === 0) {
+    console.log(colors.green(`No transactions can be performed for wallet: ${wallet.wallet}\n`));
+    return;
+  }
+
   if (useRandomTxs) {
-    // Assign a random number of transactions within balance limits
-    console.log(colors.magenta(`Starting bridge Workflow for Wallet [${wallet.wallet}]`));
-    const balances = await fetchBalances(wallet);
-    const { totalTxs, chainTxCounts } = calculateMaxTxs(balances);
-
-    if (totalTxs === 0) {
-      console.log(colors.green(`Completed transactions for wallet: ${wallet.wallet}\n`));
-      return;
-    }
-
+    // Assign a random total number of transactions
     const randomTxs = getRandomInt(MIN_BRIDGE_TXS, MAX_BRIDGE_TXS);
     const assignedTxCount = Math.min(randomTxs, totalTxs);
-    console.log(colors.yellow(`Total transactions able to Perform: [${assignedTxCount}]\n`));
+    console.log(colors.yellow(`Total transactions able to perform: [${assignedTxCount}]\n`));
 
-    // Assign transactions per chain based on available transactions
+    // Distribute transactions among the chains
     const assignedTxsPerChain = assignRandomTxs(chainTxCounts);
 
     // Execute assigned transactions
@@ -214,35 +260,21 @@ const processWallet = async (wallet, useRandomTxs) => {
         try {
           const destinationChainKey = selectDestinationChain(sourceChainKey);
           const amountETH = getRandomAmount();
-          console.log(colors.magenta(`Starting transaction ${txIndex + 1} for wallet [${wallet.wallet}] on chain [${sourceChainKey}]`));
+          console.log(colors.magenta(`Transaction ${txIndex + 1} for wallet [${wallet.wallet}] on chain [${sourceChainKey}]`));
           await performTransaction(wallet, sourceChainKey, destinationChainKey, amountETH);
         } catch (error) {
           console.error(colors.red(`Error during transaction for wallet [${wallet.wallet}]:`, error.message));
         }
-        // Wait for 1 minute before the next transaction
+        // Wait 1 minute before next transaction
         await sleep(60000);
       }
     }
-
-    console.log(colors.green(`Completed transactions for wallet: ${wallet.wallet}\n`));
   } else {
-    // Standard processing based on balances
-    console.log(colors.magenta(`Starting bridge Workflow for Wallet [${wallet.wallet}]`));
-
-    // Fetch balances for all chains
-    const balances = await fetchBalances(wallet);
-    // Determine number of possible transactions per chain
-    const { totalTxs, chainTxCounts } = calculateMaxTxs(balances);
-
-    console.log(colors.yellow(`Total transactions able to Perform: [${totalTxs}]\n`));
-
-    if (totalTxs === 0) {
-      console.log(colors.green(`Completed transactions for wallet: ${wallet.wallet}\n`));
-      return;
-    }
-
-    // Create a list of transactions to perform
+    // Standard processing: we just do as many txs as possible on each chain
+    console.log(colors.yellow(`Total transactions able to perform: [${totalTxs}]\n`));
     const transactions = [];
+
+    // Collect all transactions
     for (const [sourceChainKey, count] of Object.entries(chainTxCounts)) {
       for (let i = 0; i < count; i++) {
         const destinationChainKey = selectDestinationChain(sourceChainKey);
@@ -251,21 +283,21 @@ const processWallet = async (wallet, useRandomTxs) => {
       }
     }
 
-    // Execute each transaction
+    // Execute sequentially
     for (const tx of transactions) {
-      if (tx.sourceChainKey === tx.destinationChainKey) {
-        continue;
-      }
+      // Skip if source == destination
+      if (tx.sourceChainKey === tx.destinationChainKey) continue;
+
       await performTransaction(wallet, tx.sourceChainKey, tx.destinationChainKey, tx.amountETH);
-      // Wait for 10 seconds before next transaction
+      // Wait 10 seconds before next transaction
       await sleep(10000);
     }
-
-    console.log(colors.green(`Completed transactions for wallet: ${wallet.wallet}\n`));
   }
+
+  console.log(colors.green(`Completed transactions for wallet: ${wallet.wallet}\n`));
 };
 
-// --- New function to check if the current time (UTC) is between 1:00 AM and 10:00 AM
+// Check if the current UTC time is between 1:00 AM and 10:00 AM
 const isRestingTime = () => {
   const now = new Date();
   const hourUTC = now.getUTCHours();
@@ -276,43 +308,37 @@ const isRestingTime = () => {
 // Main function to handle automatic bridging
 const autoBridge = async () => {
   consoleClear();
-  console.log(
-    colors.green(
-      figlet.textSync('AUTO BRIDGE', { horizontalLayout: 'default' })
-    )
-  );
+  console.log(colors.green(figlet.textSync('AUTO BRIDGE', { horizontalLayout: 'default' })));
   console.log(colors.yellow('👑 Script created by Naeaex'));
-  console.log(colors.yellow('🔐 Follow me for more scripts like this - www.github.com/Naeaerc20 - www.x.com/naeaexeth\n'));
-  console.log('');
+  console.log(colors.yellow('🔐 Follow me for more scripts - www.github.com/Naeaerc20 - www.x.com/naeaexeth\n'));
 
-  // Initial prompts
+  // Prompt for config
   const answers = await inquirer.prompt([
     {
       type: 'confirm',
       name: 'useRandomTxs',
-      message: 'Do you want to use a random number of transactions per wallet (min and max bridgeTxs)?',
+      message: 'Use a random number of transactions per wallet (within min and max)?',
       default: false
     },
     {
       type: 'confirm',
       name: 'useBatches',
-      message: 'Do you want to process wallets in batches of 10?',
+      message: 'Process wallets in batches of 10?',
       default: false
     },
     {
       type: 'confirm',
       name: 'useRestingTime',
-      message: 'Do you want to use Resting Time (1:00 AM - 10:00 AM UTC)?',
+      message: 'Use Resting Time (1:00 AM - 10:00 AM UTC)?',
       default: false
     }
   ]);
 
   const { useRandomTxs, useBatches, useRestingTime } = answers;
 
-  // Start infinite cycle
+  // Infinite loop
   while (true) {
-
-    // --- If resting time is enabled, check if we are within 1:00 AM - 10:00 AM UTC
+    // If resting time is enabled, check the time
     if (useRestingTime) {
       while (isRestingTime()) {
         console.log(colors.yellow('We are in the resting time (1:00 AM - 10:00 AM UTC). Sleeping for 30 minutes...'));
@@ -320,20 +346,18 @@ const autoBridge = async () => {
       }
     }
 
-    // --- Perform the bridging logic
+    // Perform bridging logic
     if (useBatches) {
       // Process wallets in batches of 10
       for (let i = 0; i < wallets.length; i += 10) {
         const batch = wallets.slice(i, i + 10);
         console.log(colors.blue(`Processing batch of wallets ${i + 1} to ${i + batch.length}`));
 
-        // Process all wallets in the batch concurrently
+        // Process them concurrently
         const walletPromises = batch.map(wallet => processWallet(wallet, useRandomTxs));
-
-        // Use Promise.allSettled to handle all promises without failing on the first rejection
         const results = await Promise.allSettled(walletPromises);
 
-        // Handle results
+        // Check results
         results.forEach((result, index) => {
           if (result.status === 'fulfilled') {
             console.log(colors.green(`Wallet [${batch[index].wallet}] processed successfully.`));
@@ -343,11 +367,11 @@ const autoBridge = async () => {
         });
       }
     } else {
-      // Processing all wallets at once
+      // Process all wallets in one pass
       const walletPromises = wallets.map(wallet => processWallet(wallet, useRandomTxs));
       const results = await Promise.allSettled(walletPromises);
 
-      // Handle results
+      // Check results
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           console.log(colors.green(`Wallet [${wallets[index].wallet}] processed successfully.`));
@@ -357,9 +381,8 @@ const autoBridge = async () => {
       });
     }
 
-    // --- After finishing this "round" of transactions for ALL wallets,
-    //     we rest for a random time between 5 and 10 minutes before starting again.
-    const randomRest = getRandomInt(5, 10) * 60 * 1000; // random minutes between 5-10
+    // After finishing this round, wait a random time (5-10 minutes) before starting again
+    const randomRest = getRandomInt(5, 10) * 60 * 1000;
     console.log(colors.yellow(`Finished a round of transactions. Waiting ${randomRest / 60000} minutes before the next round.\n`));
     await sleep(randomRest);
   }
