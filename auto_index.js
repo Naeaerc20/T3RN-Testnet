@@ -7,6 +7,7 @@ const colors = require('colors');
 const fs = require('fs');
 const path = require('path');
 const inquirer = require('inquirer');
+const _ = require('lodash'); // Added for utility functions
 const { estimateFees } = require('./scripts/apis');
 const chains = require('./scripts/chains');
 const { orderABI } = require('./ABI');
@@ -30,8 +31,8 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 500;
 
 // Constants for bridge transactions
-const MIN_BRIDGE_TXS = 7;  // Minimum number of transactions per wallet
-const MAX_BRIDGE_TXS = 15; // Maximum number of transactions per wallet
+const MIN_BRIDGE_TXS = 12;  // Minimum number of transactions per wallet
+const MAX_BRIDGE_TXS = 20; // Maximum number of transactions per wallet
 
 // Utility function to pause execution
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -46,8 +47,8 @@ const getRandomAmount = () => {
 };
 
 // Function to choose a random destination chain different from the source
-const selectDestinationChain = (sourceChainKey) => {
-  const availableChains = Object.keys(chains).filter(chain => chain !== sourceChainKey);
+const selectDestinationChain = (sourceChainKey, enabledChains) => {
+  const availableChains = Object.keys(enabledChains).filter(chain => chain !== sourceChainKey);
   if (availableChains.length === 0) {
     throw new Error(`No available destination chains for source chain ${sourceChainKey}`);
   }
@@ -56,9 +57,9 @@ const selectDestinationChain = (sourceChainKey) => {
 };
 
 // Perform a single bridge transaction with retries
-const performTransaction = async (wallet, sourceChainKey, destinationChainKey, amountETH, retryCount = 0) => {
-  const sourceChain = chains[sourceChainKey];
-  const destinationChain = chains[destinationChainKey];
+const performTransaction = async (wallet, sourceChainKey, destinationChainKey, amountETH, enabledChains, retryCount = 0) => {
+  const sourceChain = enabledChains[sourceChainKey];
+  const destinationChain = enabledChains[destinationChainKey];
 
   const amountWei = ethers.utils.parseEther(amountETH.toString()).toString();
   const destinationASCII = destinationChain.ASCII_REF;
@@ -170,7 +171,7 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
         const newAmountETH = parseFloat((amountETH * 0.95).toFixed(5));
         console.log(colors.red('INSUFFICIENT_FUNDS: Retrying with 5% less amount.'));
         await sleep(RETRY_DELAY_MS);
-        await performTransaction(wallet, sourceChainKey, destinationChainKey, newAmountETH, retryCount + 1);
+        await performTransaction(wallet, sourceChainKey, destinationChainKey, newAmountETH, enabledChains, retryCount + 1);
       } else {
         console.log(colors.red('INSUFFICIENT_FUNDS: Maximum retries reached.\n'));
       }
@@ -188,11 +189,11 @@ const getRandomInt = (min, max) => {
 };
 
 // Fetch balances for all chains for a given wallet
-const fetchBalances = async (wallet) => {
+const fetchBalances = async (wallet, enabledChains) => {
   const balances = {};
-  for (const chainKey of Object.keys(chains)) {
+  for (const chainKey of Object.keys(enabledChains)) {
     try {
-      const provider = new ethers.providers.JsonRpcProvider(chains[chainKey].RPC_URL);
+      const provider = new ethers.providers.JsonRpcProvider(enabledChains[chainKey].RPC_URL);
       const balanceWei = await provider.getBalance(wallet.wallet);
       const balanceEth = parseFloat(ethers.utils.formatEther(balanceWei));
       balances[chainKey] = balanceEth;
@@ -232,11 +233,11 @@ const assignRandomTxs = (chainTxCounts) => {
 };
 
 // Process a single wallet
-const processWallet = async (wallet, useRandomTxs) => {
+const processWallet = async (wallet, useRandomTxs, enabledChains) => {
   console.log(colors.magenta(`Starting bridge workflow for Wallet [${wallet.wallet}]`));
 
   // 1) Fetch balances
-  const balances = await fetchBalances(wallet);
+  const balances = await fetchBalances(wallet, enabledChains);
   // 2) Determine possible transactions
   const { totalTxs, chainTxCounts } = calculateMaxTxs(balances);
 
@@ -258,10 +259,10 @@ const processWallet = async (wallet, useRandomTxs) => {
     for (const [sourceChainKey, txCount] of Object.entries(assignedTxsPerChain)) {
       for (let txIndex = 0; txIndex < txCount; txIndex++) {
         try {
-          const destinationChainKey = selectDestinationChain(sourceChainKey);
+          const destinationChainKey = selectDestinationChain(sourceChainKey, enabledChains);
           const amountETH = getRandomAmount();
           console.log(colors.magenta(`Transaction ${txIndex + 1} for wallet [${wallet.wallet}] on chain [${sourceChainKey}]`));
-          await performTransaction(wallet, sourceChainKey, destinationChainKey, amountETH);
+          await performTransaction(wallet, sourceChainKey, destinationChainKey, amountETH, enabledChains);
         } catch (error) {
           console.error(colors.red(`Error during transaction for wallet [${wallet.wallet}]:`, error.message));
         }
@@ -277,7 +278,7 @@ const processWallet = async (wallet, useRandomTxs) => {
     // Collect all transactions
     for (const [sourceChainKey, count] of Object.entries(chainTxCounts)) {
       for (let i = 0; i < count; i++) {
-        const destinationChainKey = selectDestinationChain(sourceChainKey);
+        const destinationChainKey = selectDestinationChain(sourceChainKey, enabledChains);
         const amountETH = getRandomAmount();
         transactions.push({ sourceChainKey, destinationChainKey, amountETH });
       }
@@ -288,7 +289,7 @@ const processWallet = async (wallet, useRandomTxs) => {
       // Skip if source == destination
       if (tx.sourceChainKey === tx.destinationChainKey) continue;
 
-      await performTransaction(wallet, tx.sourceChainKey, tx.destinationChainKey, tx.amountETH);
+      await performTransaction(wallet, tx.sourceChainKey, tx.destinationChainKey, tx.amountETH, enabledChains);
       // Wait 10 seconds before next transaction
       await sleep(10000);
     }
@@ -313,7 +314,7 @@ const autoBridge = async () => {
   console.log(colors.yellow('🔐 Follow me for more scripts - www.github.com/Naeaerc20 - www.x.com/naeaexeth\n'));
 
   // Prompt for config
-  const answers = await inquirer.prompt([
+  const configAnswers = await inquirer.prompt([
     {
       type: 'confirm',
       name: 'useRandomTxs',
@@ -334,7 +335,36 @@ const autoBridge = async () => {
     }
   ]);
 
-  const { useRandomTxs, useBatches, useRestingTime } = answers;
+  const { useRandomTxs, useBatches, useRestingTime } = configAnswers;
+
+  // Prompt for chains to disable
+  const disableChainsAnswer = await inquirer.prompt([
+    {
+      type: 'checkbox',
+      name: 'disabledChains',
+      message: 'Select the chains you want to disable (they will neither send nor receive funds):',
+      choices: Object.keys(chains),
+      default: []
+    }
+  ]);
+
+  const { disabledChains } = disableChainsAnswer;
+
+  // Create a new object with enabled chains
+  const enabledChains = _.cloneDeep(chains); // Clone to avoid mutating the original chains object
+
+  disabledChains.forEach(chainKey => {
+    delete enabledChains[chainKey];
+  });
+
+  // Validate that there are still chains available after disabling
+  if (Object.keys(enabledChains).length === 0) {
+    console.error(colors.red('Error: All chains have been disabled. Exiting.'));
+    process.exit(1);
+  }
+
+  console.log(colors.green(`\nEnabled chains: ${Object.keys(enabledChains).join(', ')}`));
+  console.log(colors.green(`Disabled chains: ${disabledChains.join(', ')}\n`));
 
   // Infinite loop
   while (true) {
@@ -354,7 +384,7 @@ const autoBridge = async () => {
         console.log(colors.blue(`Processing batch of wallets ${i + 1} to ${i + batch.length}`));
 
         // Process them concurrently
-        const walletPromises = batch.map(wallet => processWallet(wallet, useRandomTxs));
+        const walletPromises = batch.map(wallet => processWallet(wallet, useRandomTxs, enabledChains));
         const results = await Promise.allSettled(walletPromises);
 
         // Check results
@@ -368,7 +398,7 @@ const autoBridge = async () => {
       }
     } else {
       // Process all wallets in one pass
-      const walletPromises = wallets.map(wallet => processWallet(wallet, useRandomTxs));
+      const walletPromises = wallets.map(wallet => processWallet(wallet, useRandomTxs, enabledChains));
       const results = await Promise.allSettled(walletPromises);
 
       // Check results
