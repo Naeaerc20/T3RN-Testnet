@@ -41,6 +41,7 @@ const mainMenu = async () => {
   console.log(colors.green(figlet.textSync('T3RN-CLI', { horizontalLayout: 'default' })));
   console.log(colors.yellow('Script created by Naeaex'));
   console.log(colors.yellow('Follow me for more Scripts - www.github.com/Naeaerc20 - www.x.com/naeaexeth\n'));
+
   const answers = await inquirer.prompt([
     {
       type: 'list',
@@ -53,6 +54,7 @@ const mainMenu = async () => {
       ]
     }
   ]);
+
   switch (answers.mainOption) {
     case 'bridge':
       await bridgeMenu();
@@ -79,6 +81,7 @@ const pause = () => {
 
 const bridgeMenu = async () => {
   consoleClear();
+
   const answers = await inquirer.prompt([
     {
       type: 'list',
@@ -91,6 +94,7 @@ const bridgeMenu = async () => {
       ]
     }
   ]);
+
   switch (answers.bridgeOption) {
     case 'manual':
       await manualBridge();
@@ -118,11 +122,14 @@ const formatBalance = (balanceWei) => {
 const manualBridge = async () => {
   consoleClear();
   console.log(colors.blue('--- Manual Bridge ---\n'));
+
   try {
+    // Display wallets by their 'id' and 'address'
     const walletChoices = wallets.map(wallet => ({
-      name: `${wallet.id}. ${wallet.wallet}`,
+      name: `${wallet.id}. ${wallet.address}`,
       value: wallet.id
     }));
+
     const walletAnswer = await inquirer.prompt([
       {
         type: 'list',
@@ -131,26 +138,32 @@ const manualBridge = async () => {
         choices: walletChoices
       }
     ]);
+
     const selectedWallet = wallets.find(w => w.id === walletAnswer.walletId);
-    console.log(colors.green(`Selected wallet: ${selectedWallet.wallet}\n`));
+    console.log(colors.green(`Selected wallet: ${selectedWallet.address}\n`));
+
     const chainsToCheck = ['bast', 'arbt', 'opst', 'unit'];
     console.log(colors.blue('Wallet Balances:'));
+
+    // Check balances using selectedWallet.address
     const balances = await Promise.all(chainsToCheck.map(async (chainId) => {
       try {
         const rpc = chains[chainId].RPC_URL;
         if (!rpc) throw new Error('No RPC URL');
         const provider = new ethers.providers.JsonRpcProvider(rpc);
-        const balanceWei = await provider.getBalance(selectedWallet.wallet);
+        const balanceWei = await provider.getBalance(selectedWallet.address);
         const balanceFormatted = formatBalance(balanceWei);
         return { chain: chains[chainId].ASCII_REF, balance: balanceFormatted };
       } catch (error) {
         return { chain: chains[chainId].ASCII_REF, balance: 'N/A' };
       }
     }));
+
     balances.forEach(({ chain, balance }) => {
       console.log(`${chain}: ${balance} ETH`);
     });
     console.log();
+
     const fromChainAnswer = await inquirer.prompt([
       {
         type: 'list',
@@ -164,8 +177,10 @@ const manualBridge = async () => {
         ]
       }
     ]);
+
     const fromChain = fromChainAnswer.fromChain;
     console.log(colors.green(`Selected source chain: ${fromChain}\n`));
+
     const toChainAnswer = await inquirer.prompt([
       {
         type: 'list',
@@ -179,8 +194,10 @@ const manualBridge = async () => {
         ]
       }
     ]);
+
     const toChain = toChainAnswer.toChain;
     console.log(colors.green(`Selected destination chain: ${toChain}\n`));
+
     let amountETH = '';
     while (true) {
       amountETH = readlineSync.question('Please enter the amount of ETH you want to bridge: ');
@@ -191,12 +208,16 @@ const manualBridge = async () => {
         break;
       }
     }
+
     console.log(colors.green(`\nAmount to bridge: ${amountETH} ETH`));
+
     const amountWei = ethers.utils.parseEther(amountETH).toString();
     console.log(colors.green(`Converted amount: ${amountWei} wei`));
+
     const destinationASCII = chains[toChain].ASCII_REF;
     const destinationHEX = ethers.utils.hexlify(ethers.utils.toUtf8Bytes(destinationASCII)).slice(0, 10);
     console.log(colors.green(`Destination HEX (bytes4): ${destinationHEX}`));
+
     const estimatedData = await estimateFees(amountWei, fromChain, toChain);
     if (!estimatedData) {
       console.log(colors.red('Error fetching estimations from the API.'));
@@ -204,17 +225,21 @@ const manualBridge = async () => {
       await bridgeMenu();
       return;
     }
+
     const estimatedReceivedAmountWei = ethers.BigNumber.from(estimatedData.estimatedReceivedAmountWei.hex);
     console.log(colors.green(`Estimated Received Amount (wei): ${estimatedReceivedAmountWei.toString()}\n`));
+
+    // Build params using selectedWallet.address
     const params = {
       destination: destinationHEX,
       asset: 0,
-      targetAccount: ethers.utils.hexZeroPad(selectedWallet.wallet, 32),
+      targetAccount: ethers.utils.hexZeroPad(selectedWallet.address, 32),
       amount: estimatedReceivedAmountWei,
       rewardAsset: '0x0000000000000000000000000000000000000000',
       insurance: 0,
       maxReward: ethers.utils.parseEther(amountETH)
     };
+
     const chainConfig = chains[fromChain];
     if (!chainConfig.ROUTER) {
       console.log(colors.red(`The ROUTER address for chain ${fromChain} is not configured.`));
@@ -222,9 +247,12 @@ const manualBridge = async () => {
       await bridgeMenu();
       return;
     }
+
     const provider = new ethers.providers.JsonRpcProvider(chainConfig.RPC_URL);
+    // Use selectedWallet.privateKey
     const walletObj = new ethers.Wallet(selectedWallet.privateKey, provider);
     const routerContract = new ethers.Contract(chainConfig.ROUTER, orderABI, walletObj);
+
     try {
       console.log(colors.cyan('Getting fee data...'));
       const feeData = await provider.getFeeData();
@@ -235,6 +263,7 @@ const manualBridge = async () => {
       const add25 = baseFee.mul(25).div(100);
       const maxFeePerGas = baseFee.add(add25);
       const maxPriorityFeePerGas = maxFeePerGas;
+
       let gasLimit;
       try {
         const estimatedGas = await routerContract.estimateGas.order(
@@ -252,11 +281,13 @@ const manualBridge = async () => {
         console.log(colors.yellow('Gas estimation failed. Using fallback random gas limit.'));
         gasLimit = getRandomGasLimit(chainConfig.minGasLimit, chainConfig.maxGasLimit);
       }
+
       console.log(colors.green(`Gas Limit: ${gasLimit.toString()}`));
       console.log(colors.green(`Base Fee: ${baseFee.toString()}`));
       console.log(colors.green(`maxFeePerGas: ${maxFeePerGas.toString()}`));
       console.log(colors.green(`maxPriorityFeePerGas: ${maxPriorityFeePerGas.toString()}`));
       console.log(colors.cyan('Sending Transaction...'));
+
       const tx = await routerContract.order(
         ethers.utils.hexZeroPad(params.destination, 4),
         params.asset,
@@ -272,11 +303,14 @@ const manualBridge = async () => {
           gasLimit
         }
       );
+
       const txExplorer = chainConfig.TX_EXPLORER;
       const txUrl = `${txExplorer}/${tx.hash}`;
+
       console.log(`Bridging Funds from ${chains[fromChain].ASCII_REF} to ${chains[toChain].ASCII_REF}`);
-      console.log(`${selectedWallet.wallet} - ${amountETH} ETH`);
+      console.log(`${selectedWallet.address} - ${amountETH} ETH`);
       console.log(txUrl);
+
       const receipt = await tx.wait();
       console.log(`Tx Confirmed in Block Number: ${receipt.blockNumber}`);
     } catch (error) {
@@ -285,6 +319,7 @@ const manualBridge = async () => {
   } catch (error) {
     console.error(colors.red('An unexpected error occurred:', error.message));
   }
+
   const continueAnswer = await inquirer.prompt([
     { type: 'confirm', name: 'continue', message: 'Do you wish to perform another transaction?', default: false }
   ]);
@@ -296,7 +331,7 @@ const manualBridge = async () => {
 };
 
 const automaticBridge = async () => {
-  console.log(colors.yellow('Please run node auto_index.js to use the automatic bridging function.'));
+  console.log(colors.yellow('Please run "npm run auto" to use the automatic bridging function.'));
   await pause();
   await bridgeMenu();
 };

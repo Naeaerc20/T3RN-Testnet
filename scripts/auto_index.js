@@ -33,7 +33,6 @@ const MAX_BRIDGE_TXS = 20;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const getRandomAmount = () => {
-  // Example: currently forces 0.1 exactly; you can update these if you prefer 0.105-0.12, etc.
   const min = 0.1;
   const max = 0.1;
   const random = Math.random() * (max - min) + min;
@@ -42,7 +41,9 @@ const getRandomAmount = () => {
 
 const selectDestinationChain = (sourceChainKey, enabledChains) => {
   const availableChains = Object.keys(enabledChains).filter(chain => chain !== sourceChainKey);
-  if (availableChains.length === 0) throw new Error(`No available destination chains for source chain ${sourceChainKey}`);
+  if (availableChains.length === 0) {
+    throw new Error(`No available destination chains for source chain ${sourceChainKey}`);
+  }
   const randomIndex = Math.floor(Math.random() * availableChains.length);
   return availableChains[randomIndex];
 };
@@ -53,6 +54,7 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
   const amountWei = ethers.utils.parseEther(amountETH.toString()).toString();
   const destinationASCII = destinationChain.ASCII_REF;
   const destinationHEX = ethers.utils.hexlify(ethers.utils.toUtf8Bytes(destinationASCII)).slice(0, 10);
+
   let estimatedData;
   try {
     estimatedData = await estimateFees(amountWei, sourceChainKey, destinationChainKey);
@@ -60,31 +62,38 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
     console.log(colors.red('Error fetching estimations from the API:', error.message));
     return;
   }
+
   if (!estimatedData) {
     console.log(colors.red('Error fetching estimations from the API.'));
     return;
   }
+
   const estimatedReceivedAmountWei = ethers.BigNumber.from(estimatedData.estimatedReceivedAmountWei.hex).toString();
   const params = {
     destination: destinationHEX,
     asset: 0,
-    targetAccount: ethers.utils.hexZeroPad(wallet.wallet, 32),
+    targetAccount: ethers.utils.hexZeroPad(wallet.address, 32),
     amount: estimatedReceivedAmountWei,
     rewardAsset: '0x0000000000000000000000000000000000000000',
     insurance: 0,
     maxReward: ethers.utils.parseEther(amountETH.toString()).toString()
   };
+
   if (!sourceChain.ROUTER) {
     console.log(colors.red(`The ROUTER address for chain ${sourceChainKey} is not configured.`));
     return;
   }
+
   const provider = new ethers.providers.JsonRpcProvider(sourceChain.RPC_URL);
   const walletObj = new ethers.Wallet(wallet.privateKey, provider);
   const routerContract = new ethers.Contract(sourceChain.ROUTER, orderABI, walletObj);
+
   try {
     const feeData = await provider.getFeeData();
     let baseFee = feeData.lastBaseFeePerGas || feeData.maxFeePerGas;
-    if (!baseFee) baseFee = ethers.utils.parseUnits('1', 'gwei');
+    if (!baseFee) {
+      baseFee = ethers.utils.parseUnits('1', 'gwei');
+    }
     const add25 = baseFee.mul(25).div(100);
     const maxFeePerGas = baseFee.add(add25);
     const maxPriorityFeePerGas = maxFeePerGas;
@@ -102,8 +111,11 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
       );
       gasLimit = estimatedGas.mul(110).div(100);
     } catch (error) {
-      gasLimit = Math.floor(Math.random() * (sourceChain.maxGasLimit - sourceChain.minGasLimit + 1)) + sourceChain.minGasLimit;
+      gasLimit = Math.floor(
+        Math.random() * (sourceChain.maxGasLimit - sourceChain.minGasLimit + 1)
+      ) + sourceChain.minGasLimit;
     }
+
     const tx = await routerContract.order(
       ethers.utils.hexZeroPad(params.destination, 4),
       params.asset,
@@ -119,13 +131,16 @@ const performTransaction = async (wallet, sourceChainKey, destinationChainKey, a
         gasLimit
       }
     );
+
     console.log(colors.green(`Performing Bridge from [${sourceChain.ASCII_REF}] to [${destinationChain.ASCII_REF}]`));
     console.log(colors.green(`Tx Amount: [${amountETH}] ETH`));
     const txExplorer = sourceChain.TX_EXPLORER;
     const txUrl = `${txExplorer}/${tx.hash}`;
     console.log(colors.green(`Tx Hash Sent! - ${txUrl}`));
+
     const receipt = await tx.wait();
-    console.log(colors.green(`Tx Confirmed in Block [${receipt.blockNumber}]\n`));
+    console.log(colors.green(`Tx Confirmed in Block [${receipt.blockNumber}]`));
+    console.log();
   } catch (error) {
     const errorMessage = error.message.toLowerCase();
     if (errorMessage.includes('insufficient funds')) {
@@ -154,7 +169,7 @@ const fetchBalances = async (wallet, enabledChains) => {
   for (const chainKey of Object.keys(enabledChains)) {
     try {
       const provider = new ethers.providers.JsonRpcProvider(enabledChains[chainKey].RPC_URL);
-      const balanceWei = await provider.getBalance(wallet.wallet);
+      const balanceWei = await provider.getBalance(wallet.address);
       const balanceEth = parseFloat(ethers.utils.formatEther(balanceWei));
       balances[chainKey] = balanceEth;
     } catch (error) {
@@ -165,26 +180,30 @@ const fetchBalances = async (wallet, enabledChains) => {
 };
 
 const processWallet = async (wallet, useRandomTxs, enabledChains) => {
-  console.log(colors.green(`Starting bridge workflow for Wallet [${wallet.wallet}]`));
+  console.log(colors.green(`Starting bridge workflow for Wallet [${wallet.address}]`));
   const balances = await fetchBalances(wallet, enabledChains);
   const availableSourceChains = Object.keys(balances).filter(chainKey => balances[chainKey] >= 0.1);
+
   if (availableSourceChains.length === 0) {
-    console.log(colors.blue(`No transactions can be performed for wallet: ${wallet.wallet}`));
+    console.log(colors.blue(`No transactions can be performed for wallet: ${wallet.address}`));
     return;
   }
+
   let totalTxs = 0;
   for (const chainKey of availableSourceChains) {
     totalTxs += Math.floor(balances[chainKey] / 0.1);
   }
+
   if (useRandomTxs) {
     const randomTxs = getRandomInt(MIN_BRIDGE_TXS, MAX_BRIDGE_TXS);
     const assignedTxCount = Math.min(randomTxs, totalTxs);
     console.log(colors.green(`Total transactions able to perform: [${assignedTxCount}]`));
+
     for (let txIndex = 0; txIndex < assignedTxCount; txIndex++) {
       const sourceChainKey = availableSourceChains[Math.floor(Math.random() * availableSourceChains.length)];
       const destinationChainKey = selectDestinationChain(sourceChainKey, enabledChains);
       const amountETH = getRandomAmount();
-      console.log(colors.green(`Transaction ${txIndex + 1} for wallet [${wallet.wallet}] from [${sourceChainKey}]`));
+      console.log(colors.green(`Transaction ${txIndex + 1} for wallet [${wallet.address}] from [${sourceChainKey}]`));
       await performTransaction(wallet, sourceChainKey, destinationChainKey, amountETH, enabledChains);
       await sleep(60000);
     }
@@ -200,7 +219,8 @@ const processWallet = async (wallet, useRandomTxs, enabledChains) => {
       }
     }
   }
-  console.log(colors.blue(`Completed transactions for wallet: ${wallet.wallet}`));
+
+  console.log(colors.blue(`Completed transactions for wallet: ${wallet.address}`));
 };
 
 const isRestingTime = () => {
@@ -214,25 +234,42 @@ const autoBridge = async () => {
   console.log(figlet.textSync('AUTO BRIDGE', { horizontalLayout: 'default' }));
   console.log(colors.blue('Script created by Naeaex'));
   console.log(colors.blue('Follow me for more scripts - www.github.com/Naeaerc20 - www.x.com/naeaexeth'));
+
   const configAnswers = await inquirer.prompt([
     { type: 'confirm', name: 'useRandomTxs', message: 'Use a random number of transactions per wallet (within min and max)?', default: false },
     { type: 'confirm', name: 'useBatches', message: 'Process wallets in batches of 10?', default: false },
     { type: 'confirm', name: 'useRestingTime', message: 'Use Resting Time (1:00 AM - 10:00 AM UTC)?', default: false }
   ]);
+
   const { useRandomTxs, useBatches, useRestingTime } = configAnswers;
+
   const disableChainsAnswer = await inquirer.prompt([
-    { type: 'checkbox', name: 'disabledChains', message: 'Select the chains you want to disable (they will neither send nor receive funds):', choices: Object.keys(chains), default: [] }
+    {
+      type: 'checkbox',
+      name: 'disabledChains',
+      message: 'Select the chains you want to disable (they will neither send nor receive funds):',
+      choices: Object.keys(chains),
+      default: []
+    }
   ]);
+
   const { disabledChains } = disableChainsAnswer;
   const enabledChains = _.cloneDeep(chains);
-  disabledChains.forEach(chainKey => { delete enabledChains[chainKey]; });
+
+  disabledChains.forEach(chainKey => {
+    delete enabledChains[chainKey];
+  });
+
   if (Object.keys(enabledChains).length === 0) {
     console.error(colors.red('Error: All chains have been disabled. Exiting.'));
     process.exit(1);
   }
+
   const shuffledWallets = _.shuffle(wallets);
+
   console.log(colors.green(`Enabled chains: ${Object.keys(enabledChains).join(', ')}`));
   console.log(colors.green(`Disabled chains: ${disabledChains.join(', ')}`));
+
   while (true) {
     if (useRestingTime) {
       while (isRestingTime()) {
@@ -240,17 +277,19 @@ const autoBridge = async () => {
         await sleep(30 * 60 * 1000);
       }
     }
+
     if (useBatches) {
       for (let i = 0; i < shuffledWallets.length; i += 10) {
         const batch = shuffledWallets.slice(i, i + 10);
         console.log(colors.green(`Processing batch of wallets ${i + 1} to ${i + batch.length}`));
         const walletPromises = batch.map(wallet => processWallet(wallet, useRandomTxs, enabledChains));
         const results = await Promise.allSettled(walletPromises);
+
         results.forEach((result, index) => {
           if (result.status === 'fulfilled') {
-            console.log(colors.green(`Wallet [${batch[index].wallet}] processed successfully.`));
+            console.log(colors.green(`Wallet [${batch[index].address}] processed successfully.`));
           } else {
-            console.log(colors.red(`Wallet [${batch[index].wallet}] encountered an error: ${result.reason}`));
+            console.log(colors.red(`Wallet [${batch[index].address}] encountered an error: ${result.reason}`));
           }
         });
       }
@@ -259,6 +298,7 @@ const autoBridge = async () => {
         await processWallet(wallet, useRandomTxs, enabledChains);
       }
     }
+
     const randomRest = getRandomInt(5, 10) * 60 * 1000;
     console.log(colors.green(`Finished a round of transactions. Waiting ${randomRest / 60000} minutes before the next round.`));
     await sleep(randomRest);
