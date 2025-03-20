@@ -14,6 +14,8 @@
     "start": "node index.js",
     "add": "node scripts/wallet_aggregator.js",
     "auto": "node scripts/auto_index.js",
-    "show": "cat scripts/wallets.json"
+    "show": "cat scripts/wallets.json",
+    "executor": "cd executor && chmod +x script.sh && ./script.sh"
+
   }
 }

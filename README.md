@@ -6,10 +6,13 @@ Accurace BRN Points for future $TRN Airdrop
 ## Project Structure
 
 ```bash
+
 T3RN-Testnet/
 ├── ABI.js                       # Main contract ABI definitions used by the CLI.
 ├── index.js                     # Primary CLI script for bridging assets and checking points.
 ├── README.md                    # Project documentation and usage instructions.
+├── executor/
+│   └── script.sh                # A bash Automatized Script for Instalation & Execution of Executor Node.
 ├── scripts/
 │   ├── apis.js                  # Contains functions for API calls (e.g., fee estimation).
 │   ├── auto_index.js            # Script for automatic bridging with random transactions.
@@ -23,6 +26,7 @@ T3RN-Testnet/
     └── scripts/
         ├── layerzeroBridge.js   # Script for bridging assets using the LayerZero protocol.
         └── superBridge.js       # Script for executing bridge asset transactions on Super bridge.
+
 ```
 
 ## Instructions
@@ -33,6 +37,14 @@ T3RN-Testnet/
 4. Run random tx's - "npm run auto"
 5. Add existing wallets to the script - "npm run add"
 6. Check added wallets in the script - npm run show
+
+## Executor Node
+
+In case that you're interested in running your executor it's been created an automatized script to help you make this all in one.
+Just first open a screen using "screen -S executor" then run "npm run executor" - Insert your data and save this screen.
+Every time T3RN update their node, just back to the screen, stop your node and re run the script.
+
+Promt - npm run executor
 
 
 Good luck using it!
