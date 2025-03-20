@@ -1,27 +1,38 @@
-# T3RN CLI
+## T3RN-Testnet V2
 
-Welcome to this T3RN code a tool specifically dedicated to maximizing points on the current T3RN Testnet
+Welcome to this script T3RN to handle/manage multiple account operation, random transaction execution etc.
+Accurace BRN Points for future $TRN Airdrop
 
-Spend funds from any chain to any chain, sending a minimum of 0.1ETH for each transaction. The manual version is already implemented, I will add another automated version later.
+## Project Structure
 
-Follow me for more updates
+```bash
+T3RN-Testnet/
+├── ABI.js                       # Main contract ABI definitions used by the CLI.
+├── index.js                     # Primary CLI script for bridging assets and checking points.
+├── README.md                    # Project documentation and usage instructions.
+├── scripts/
+│   ├── apis.js                  # Contains functions for API calls (e.g., fee estimation).
+│   ├── auto_index.js            # Script for automatic bridging with random transactions.
+│   ├── chains.js                # Configuration for various blockchain networks.
+│   ├── proxies.txt              # List of proxy URLs (format: socks5://user:pass@ip:port).
+│   ├── wallet_aggregator.js     # Script for aggregating and managing wallet data.
+│   └── wallets.json             # JSON file storing wallet information (addresses, keys, etc.).
+└── strategy/
+    ├── ABI.js                   # ABI definitions specific to strategy contracts.
+    ├── index.js                 # Main CLI script for executing strategy-based operations.
+    └── scripts/
+        ├── layerzeroBridge.js   # Script for bridging assets using the LayerZero protocol.
+        └── superBridge.js       # Script for executing bridge asset transactions on Super bridge.
+```
 
-Any donation is welcomed! via EVM - 0xd3Ca2e3346d1d19A97E28bBe91BAaee9ad70aB49
+## Instructions
 
-Basic facilities:
-1. Clone the Repository
-2. Enter the base directory
-3. Run "npm install" to install the necessary packages and versions
-4. Add your wallets to "wallets.json" in the written format
-5. Run "node index.js" and start using the application
+1. Clone Repository - "git clone https://github.com/Naeaerc20/T3RN-Testnet"
+2. Open main Directory - "cd T3RN-Testnet"
+3. Initialize basic app - "npm start"
+4. Run random tx's - "npm run auto"
+5. Add existing wallets to the script - "npm run add"
+6. Check added wallets in the script - npm run show
 
-NOTE 1: For better performance it is highly recommended to set your own RPC URLs in the "scripts/chains.js" file  
 
-NOTE 2: Added "strategy" directory, I discovered that if you use layerZero bridge you can bridge ETH from Arbitrum, Optimism, Ethereum Mainnet  
-To Sepolia & obtain a lot of ETH, Then you can use Super Bridge to bridge your SepoliaETH to Optimism Sepolia ETH - it can make the code to run smoothly  
-(layerzero bridge still under construction)...  
-(superbridge available to be used).  
-
-Edit "strategy/ABI.js" and set your on alchemy RPCs for better experience  
-
-NOTE 3: Added optional usage of proxies for point checker - add your proxies in this form "socks5://login:pass@ip:port" in proxies.txt
+Good luck using it!

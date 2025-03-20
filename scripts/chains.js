@@ -1,39 +1,39 @@
 // scripts/chains.js
 
 const chains = {
-  arbt: {
-    RPC_URL: 'https://endpoints.omniatech.io/v1/arbitrum/sepolia/public'
-    CHAIN_ID: 421614,
-    ASCII_REF: 'arbt',
-    ROUTER: '0x8D86c3573928CE125f9b2df59918c383aa2B514D',
-    TX_EXPLORER: 'https://sepolia.arbiscan.io/tx',
+  bast: {
+    RPC_URL: 'https://base-sepolia.drpc.org',
+    CHAIN_ID: 84532,
+    ASCII_REF: 'bast',
+    ROUTER: '0xCEE0372632a37Ba4d0499D1E2116eCff3A17d3C3',
+    TX_EXPLORER: 'https://sepolia.basescan.org/tx',
     minGasLimit: 350000,
     maxGasLimit: 800000
   },
-  opsp: {
-    RPC_URL: 'https://endpoints.omniatech.io/v1/op/sepolia/public'
+  arbt: {
+    RPC_URL: 'https://arbitrum-sepolia.drpc.org',
+    CHAIN_ID: 421614,
+    ASCII_REF: 'arbt',
+    ROUTER: '0x22B65d0B9b59af4D3Ed59F18b9Ad53f5F4908B54',
+    TX_EXPLORER: 'https://sepolia.arbiscan.io/tx',
+    minGasLimit: 1500000,
+    maxGasLimit: 3000000
+  },
+  opst: {
+    RPC_URL: 'https://sepolia.optimism.io',
     CHAIN_ID: 11155420,
-    ASCII_REF: 'opsp',
-    ROUTER: '0xF221750e52aA080835d2957F2Eed0d5d7dDD8C38',
+    ASCII_REF: 'opst',
+    ROUTER: '0xb6Def636914Ae60173d9007E732684a9eEDEF26E',
     TX_EXPLORER: 'https://sepolia-optimism.etherscan.io/tx',
     minGasLimit: 350000,
     maxGasLimit: 800000
   },
-  blss: {
-    RPC_URL: 'https://sepolia.blast.io'
-    CHAIN_ID: 168587773,
-    ASCII_REF: 'blss',
-    ROUTER: '0x1D5FD4ed9bDdCCF5A74718B556E9d15743cB26A2',
-    TX_EXPLORER: 'https://sepolia.blastscan.io/tx',
-    minGasLimit: 350000,
-    maxGasLimit: 800000
-  },
-  bssp: {
-    RPC_URL: 'https://base-sepolia-rpc.publicnode.com'
-    CHAIN_ID: 84532,
-    ASCII_REF: 'bssp',
-    ROUTER: '0x30A0155082629940d4bd9Cd41D6EF90876a0F1b5',
-    TX_EXPLORER: 'https://sepolia.basescan.org/tx',
+  unit: {
+    RPC_URL: 'https://sepolia.unichain.org',
+    CHAIN_ID: 1301,
+    ASCII_REF: 'unit',
+    ROUTER: '0x1cEAb5967E5f078Fa0FEC3DFfD0394Af1fEeBCC9',
+    TX_EXPLORER: 'https://unichain-sepolia.blockscout.com/tx',
     minGasLimit: 350000,
     maxGasLimit: 800000
   }

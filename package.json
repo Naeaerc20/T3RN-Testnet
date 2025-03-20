@@ -9,5 +9,11 @@
     "inquirer": "^8.2.4",
     "readline-sync": "^1.4.10",
     "socks-proxy-agent": "^8.0.5"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "add": "node scripts/wallet_aggregator.js",
+    "auto": "node scripts/auto_index.js",
+    "show": "cat scripts/wallets.json"
   }
 }

@@ -58,8 +58,8 @@ const performBridge = async (wallet, amountETH) => {
     // Transaction options
     const txOptions = {
       gasLimit: gasLimit,
-      maxFeePerGas: ethers.utils.parseUnits('10', 'gwei'),
-      maxPriorityFeePerGas: ethers.utils.parseUnits('10', 'gwei'),
+      maxFeePerGas: ethers.utils.parseUnits('35', 'gwei'),
+      maxPriorityFeePerGas: ethers.utils.parseUnits('35', 'gwei'),
       value: ethers.utils.parseEther(amountETH.toString())
     };
 
