@@ -4,9 +4,10 @@
     "colors": "^1.4.0",
     "console-clear": "^1.1.1",
     "dotenv": "^16.4.7",
-    "ethers": "^5.7.2",
+    "ethers": "^5.8.0",
     "figlet": "^1.8.0",
     "inquirer": "^8.2.4",
+    "prompt-sync": "^4.2.0",
     "readline-sync": "^1.4.10",
     "socks-proxy-agent": "^8.0.5"
   },
@@ -16,6 +17,5 @@
     "auto": "node scripts/auto_index.js",
     "show": "cat scripts/wallets.json",
     "executor": "cd executor && chmod +x script.sh && ./script.sh"
-
   }
 }
