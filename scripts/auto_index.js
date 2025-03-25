@@ -33,8 +33,8 @@ const MAX_BRIDGE_TXS = 20;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const getRandomAmount = () => {
-  const min = 0.1;
-  const max = 0.1;
+  const min = 1;
+  const max = 1;
   const random = Math.random() * (max - min) + min;
   return parseFloat(random.toFixed(5));
 };

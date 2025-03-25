@@ -9,23 +9,26 @@ Accurace BRN Points for future $TRN Airdrop
 
 T3RN-Testnet/
 ├── ABI.js                       # Main contract ABI definitions used by the CLI.
-├── index.js                     # Primary CLI script for bridging assets and checking points.
+├── index.js                     # Primary CLI script for bridging assets, checking points, and wallet balances.
 ├── README.md                    # Project documentation and usage instructions.
 ├── executor/
-│   └── script.sh                # A bash Automatized Script for Instalation & Execution of Executor Node.
+│   └── script.sh                # Bash script for installation & execution of the Executor Node.
 ├── scripts/
 │   ├── apis.js                  # Contains functions for API calls (e.g., fee estimation).
 │   ├── auto_index.js            # Script for automatic bridging with random transactions.
 │   ├── chains.js                # Configuration for various blockchain networks.
 │   ├── proxies.txt              # List of proxy URLs (format: socks5://user:pass@ip:port).
 │   ├── wallet_aggregator.js     # Script for aggregating and managing wallet data.
-│   └── wallets.json             # JSON file storing wallet information (addresses, keys, etc.).
+│   ├── wallets.json             # JSON file storing wallet information (addresses, keys, etc.).
+│   ├── balance_checker.js       # Script for checking wallet balances across multiple networks.
+│   └── points_checker.js        # Script for checking user points based on wallet balances.
 └── strategy/
     ├── ABI.js                   # ABI definitions specific to strategy contracts.
     ├── index.js                 # Main CLI script for executing strategy-based operations.
     └── scripts/
         ├── layerzeroBridge.js   # Script for bridging assets using the LayerZero protocol.
         └── superBridge.js       # Script for executing bridge asset transactions on Super bridge.
+
 
 ```
 
